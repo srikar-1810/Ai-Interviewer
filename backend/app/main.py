@@ -8,6 +8,7 @@ from typing import AsyncGenerator
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.database import DATABASE_URL, init_db, close_db
 from app.routes.auth import router as auth_router
 from app.routes.resume import router as resume_router
@@ -37,14 +38,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+BACKEND_URL = os.getenv("BACKEND_URL", "")
+CORS_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+if BACKEND_URL:
+    CORS_ORIGINS.append(BACKEND_URL)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-    ],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -65,3 +71,9 @@ async def health() -> dict:
         "groq_enabled": bool(os.getenv("GROQ_API_KEY")),
         "database": "local_sqlite" if is_sqlite else "postgresql",
     }
+
+# ── Serve Frontend Build (Production) ──
+BASE_DIR = Path(__file__).resolve().parent.parent
+STATIC_DIR = BASE_DIR / "static"
+if STATIC_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="frontend")

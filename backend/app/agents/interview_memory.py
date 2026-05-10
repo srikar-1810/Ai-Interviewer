@@ -120,14 +120,26 @@ def _longest_common_substring_ratio(a: str, b: str) -> float:
 
 
 def _extract_key_concepts(text: str) -> set[str]:
-    """Extract important technical/conceptual phrases from text."""
+    """Extract important technical/conceptual phrases from text using word-boundary matching."""
     text_lower = text.lower()
     concepts = set()
     for topic, info in TOPIC_TAXONOMY.items():
         for kw in info["keywords"]:
-            if kw.lower() in text_lower:
-                concepts.add(kw.lower())
+            try:
+                if re.search(r'\b' + re.escape(kw.lower()) + r'\b', text_lower):
+                    concepts.add(kw.lower())
+            except re.error:
+                if kw.lower() in text_lower:
+                    concepts.add(kw.lower())
     return concepts
+
+
+def _concepts_by_topic(concepts: set[str], target_topic: str) -> set[str]:
+    """Filter a flat set of concept strings to only those belonging to the given topic."""
+    if not target_topic or target_topic == "general":
+        return concepts
+    topic_keywords = set(k.lower() for k in TOPIC_TAXONOMY.get(target_topic, {}).get("keywords", []))
+    return {c for c in concepts if c in topic_keywords}
 
 
 def _ngram_overlap(a: str, b: str, n: int = 3) -> float:

@@ -16,6 +16,8 @@ from .interview_memory import (
     InterviewStateMachine,
     analyze_answer_depth,
     _extract_key_concepts,
+    _concepts_by_topic,
+    TOPIC_TAXONOMY,
 )
 
 DIFFICULTY_LEVELS = ["easy", "medium", "hard"]
@@ -112,12 +114,12 @@ class OrchestratorAgent:
                 print(f"[Orchestrator] Stage: {old} -> {self.state_machine.current_stage}")
 
         stage_ctx = self.state_machine.get_context_for_prompt(self.memory)
-        history = self.memory.conversation_history[-4:] if self.memory.conversation_history else []
-        history_text = "\n".join(f"{m['role'].upper()}: {m['content'][:200]}" for m in history)
+        history = self.memory.conversation_history[-8:] if self.memory.conversation_history else []
+        history_text = "\n".join(f"{m['role'].upper()}: {m['content'][:300]}" for m in history)
         asked = self.memory.questions_asked
         asked_text = "\n".join(
-            f"- Q{i+1} ({q.get('topic','?')}, {q.get('difficulty','?')}): {q['text'][:100]}"
-            for i, q in enumerate(asked[-3:])
+            f"- Q{i+1} ({q.get('topic','?')}, {q.get('difficulty','?')}): {q['text'][:150]}"
+            for i, q in enumerate(asked[-5:])
         )
 
         last_answer_info = ""
@@ -143,6 +145,20 @@ class OrchestratorAgent:
         if self.consecutive_successes >= 2:
             consecutive_note = f"\nNOTE: Candidate excelling ({self.consecutive_successes}x). Ask harder questions."
 
+        last_topic = self.memory.questions_asked[-1].get("topic", "") if self.memory.questions_asked else ""
+        topic_exhausted = self.memory.is_topic_exhausted(last_topic) if last_topic else False
+        depth_guardrail = ""
+        if topic_exhausted:
+            depth_guardrail = (
+                f"\nTOPIC DEPTH LIMIT REACHED: Do NOT ask another follow-up about '{last_topic}'. "
+                f"Switch to a NEW topic from: {', '.join(uncovered[:5]) if uncovered else 'any relevant area'}"
+            )
+        elif self.memory._probe_depth_count >= 2:
+            depth_guardrail = (
+                f"\nYou have asked {self.memory._probe_depth_count} follow-ups on the current topic. "
+                f"Limit to at most ONE more drill-down, then transition to a new topic."
+            )
+
         q_context = (
             f"Difficulty: {self.current_difficulty}{consecutive_note}\n"
             f"Role: {role} | Skills: {', '.join(skills[:6])}\n"
@@ -151,7 +167,8 @@ class OrchestratorAgent:
             f"Uncovered: {', '.join(uncovered[:4]) if uncovered else 'All covered'}\n"
             f"Strengths: {stage_ctx['strengths'][:200]}\n"
             f"Weaknesses: {stage_ctx['weaknesses'][:200]}\n"
-            f"Drill: {(stage_ctx.get('drill_recommendation') or '')[:100]}\n\n"
+            f"Drill: {(stage_ctx.get('drill_recommendation') or '')[:100]}\n"
+            f"{depth_guardrail}\n\n"
             f"{last_answer_info}\n"
             f"--- Questions asked (NEVER repeat) ---\n{asked_text}\n\n"
             f"--- Recent ---\n{history_text}\n\n"
@@ -197,9 +214,23 @@ class OrchestratorAgent:
         last_q = self.memory.questions_asked[-1] if self.memory.questions_asked else None
         last_topic = last_q.get("topic", "") if last_q else ""
 
-        if concepts:
-            words = list(concepts)[:2]
-            text = f"Can you go deeper into how {' and '.join(words)} work together?"
+        if self.memory.is_topic_exhausted(last_topic):
+            uncovered = self.memory.get_uncovered_topics()
+            if uncovered:
+                text = f"Let's switch to a different area. Tell me about {uncovered[0].replace('_', ' ')}."
+            else:
+                skills = (self._resume or {}).get("skills", [])
+                if skills:
+                    text = f"Tell me more about your experience with {skills[0]}."
+                else:
+                    return None
+        elif concepts:
+            topic_concepts = _concepts_by_topic(concepts, last_topic)
+            if topic_concepts:
+                words = list(topic_concepts)[:2]
+                text = f"Can you go deeper into how {' and '.join(words)} work together?"
+            else:
+                text = f"Can you elaborate more on {last_topic.replace('_', ' ')}?"
         elif last_topic:
             text = f"Can you elaborate more on {last_topic.replace('_', ' ')}?"
         else:
