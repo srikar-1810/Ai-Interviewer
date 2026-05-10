@@ -17,9 +17,9 @@ services:
       - key: GOOGLE_CLIENT_SECRET
         sync: false
       - key: BACKEND_URL
-        value: https://interviewai-backend.onrender.com
+        value: https://ai-interviewer-7w1u.onrender.com
       - key: FRONTEND_URL
-        value: https://interviewai-backend.onrender.com
+        value: https://ai-interviewer-7w1u.onrender.com
       - key: USE_REMOTE_DATABASE
         value: "true"
       - key: DATABASE_URL

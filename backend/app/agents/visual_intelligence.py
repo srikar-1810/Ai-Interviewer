@@ -21,9 +21,12 @@ Temporal state maintained via VisualIntelligenceEngine.
 import os
 import math
 import time
+import logging
 import numpy as np
 from typing import Optional
 from collections import deque
+
+logger = logging.getLogger("visual_intel")
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__))
 FACE_MODEL_PATH = os.path.join(MODEL_DIR, "face_landmarker.task")
@@ -35,7 +38,7 @@ try:
         PoseLandmarker, PoseLandmarkerOptions,
         RunningMode,
     )
-    from mediapipe.tasks.python.core.base_options import BaseOptions
+    from mediapipe.tasks.python.core.base_options import BaseOptions, Delegate
     import mediapipe as mp
     MEDIAPIPE_AVAILABLE = True
 except ImportError:
@@ -55,14 +58,14 @@ def _get_face_landmarker():
             with open(FACE_MODEL_PATH, "rb") as f:
                 model_data = f.read()
             options = FaceLandmarkerOptions(
-                base_options=BaseOptions(model_asset_buffer=model_data),
+                base_options=BaseOptions(model_asset_buffer=model_data, delegate=Delegate.CPU),
                 running_mode=RunningMode.IMAGE,
                 output_face_blendshapes=True,
                 output_facial_transformation_matrixes=True,
             )
             _face_landmarker = FaceLandmarker.create_from_options(options)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("Failed to load face_landmarker model: %s", e)
     return _face_landmarker
 
 
@@ -75,12 +78,12 @@ def _get_pose_landmarker():
             with open(POSE_MODEL_PATH, "rb") as f:
                 model_data = f.read()
             options = PoseLandmarkerOptions(
-                base_options=BaseOptions(model_asset_buffer=model_data),
+                base_options=BaseOptions(model_asset_buffer=model_data, delegate=Delegate.CPU),
                 running_mode=RunningMode.IMAGE,
             )
             _pose_landmarker = PoseLandmarker.create_from_options(options)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("Failed to load pose_landmarker model: %s", e)
     return _pose_landmarker
 
 
@@ -92,7 +95,8 @@ def _decode_image(image_data: bytes) -> Optional[np.ndarray]:
         if img is None:
             return None
         return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    except Exception:
+    except Exception as e:
+        logger.warning("Image decode failed: %s", e)
         return None
 
 
@@ -273,6 +277,7 @@ def analyze_frame(image_data: bytes) -> dict:
                 result["blink_rate"] = round(engine.compute_blink_rate(), 1)
 
         except Exception as e:
+            logger.error("Face analysis error: %s", e)
             result["error"] = f"Face analysis error: {str(e)[:80]}"
 
     # ── POSTURE ANALYSIS ──
