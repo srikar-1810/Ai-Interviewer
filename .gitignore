@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+backend/venv/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Environment files (contain secrets/keys)
+backend/.env
+frontend/.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+
+# Build artifacts
+*.tsbuildinfo
+
+# Exports
+*_code_export.md
+
+# Logs
+*.log
+/tmp/
+
+# Coverage
+htmlcov/
+.coverage
