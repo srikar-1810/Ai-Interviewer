@@ -1,5 +1,6 @@
 import os
 import asyncio
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 
@@ -44,6 +45,7 @@ async def init_db():
     global engine, async_session, DATABASE_URL
     try:
         await asyncio.wait_for(_create_tables(), timeout=10)
+        await migrate_schema()
     except Exception as exc:
         if DATABASE_URL == LOCAL_DATABASE_URL:
             raise
@@ -53,12 +55,31 @@ async def init_db():
         engine = _create_engine(DATABASE_URL)
         async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         await _create_tables()
+        await migrate_schema()
 
 
 async def _create_tables():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     print(f"[DB] Tables created/verified using {DATABASE_URL}")
+
+async def migrate_schema():
+    """Add missing columns that SQLAlchemy create_all won't add to existing tables."""
+    missing_columns = {
+        "users": [
+            ("token", "VARCHAR(128)"),
+        ],
+    }
+    async with engine.begin() as conn:
+        for table, cols in missing_columns.items():
+            for col_name, col_type in cols:
+                try:
+                    await conn.execute(
+                        sa.text(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_type}")
+                    )
+                    print(f"[DB] Added missing column {table}.{col_name}")
+                except Exception:
+                    pass  # column already exists
 
 
 async def get_session() -> AsyncSession:
